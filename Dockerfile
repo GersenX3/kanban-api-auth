@@ -16,8 +16,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar código
 COPY . .
 
+# Copiar entrypoint
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Exponer puerto
 EXPOSE 5000
+ENTRYPOINT ["/entrypoint.sh"]
+CMD flask --app app:create_app db upgrade && flask run --host=0.0.0.0
 
-# Comando por defecto
-CMD ["flask", "--app", "app:create_app", "run", "--host=0.0.0.0", "--port=5000"]
+
