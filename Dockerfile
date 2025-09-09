@@ -19,10 +19,13 @@ COPY . .
 # Copiar entrypoint
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+RUN apt-get update && apt-get install -y gcc libpq-dev postgresql-client && rm -rf /var/lib/apt/lists/*
+
 
 # Exponer puerto
 EXPOSE 5000
 ENTRYPOINT ["/entrypoint.sh"]
-CMD flask --app app:create_app db upgrade && flask run --host=0.0.0.0
+CMD []
+
 
 
