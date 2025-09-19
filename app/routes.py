@@ -1,8 +1,10 @@
 from flask import Blueprint, request, jsonify
-from .models import User
+from .models import User, Board
 from .db import db
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+import json
+from datetime import datetime
 
 auth_bp = Blueprint("auth", __name__)
 bcrypt = Bcrypt()
@@ -31,6 +33,25 @@ def register():
 
         new_user = User(email=email, password=hashed_pw)
         db.session.add(new_user)
+        db.session.commit()
+        
+        # Crear tablero por defecto para el nuevo usuario
+        default_columns = [
+            {
+                "id": "col-1",
+                "title": "Pendiente",
+                "tasks": [{"id": "t-1", "text": "Primera tarea"}]
+            },
+            {"id": "col-2", "title": "En progreso", "tasks": []},
+            {"id": "col-3", "title": "Hecho", "tasks": []}
+        ]
+        
+        default_board = Board(
+            user_id=new_user.id,
+            name="Mi Tablero Kanban",
+            columns_data=json.dumps(default_columns)
+        )
+        db.session.add(default_board)
         db.session.commit()
 
         return jsonify({"msg": "User registered successfully"}), 201
@@ -86,6 +107,137 @@ def me():
     except Exception as e:
         return jsonify({"msg": "Internal server error"}), 500
 
+# NUEVAS RUTAS PARA MANEJO DE TABLEROS
+
+@auth_bp.route("/boards", methods=["GET"])
+@jwt_required()
+def get_boards():
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        
+        if not user:
+            return jsonify({"msg": "User not found"}), 404
+        
+        boards = Board.query.filter_by(user_id=user_id).all()
+        return jsonify([board.to_dict() for board in boards]), 200
+        
+    except Exception as e:
+        return jsonify({"msg": "Internal server error"}), 500
+
+@auth_bp.route("/boards/<int:board_id>", methods=["GET"])
+@jwt_required()
+def get_board(board_id):
+    try:
+        user_id = int(get_jwt_identity())
+        board = Board.query.filter_by(id=board_id, user_id=user_id).first()
+        
+        if not board:
+            return jsonify({"msg": "Board not found"}), 404
+            
+        return jsonify(board.to_dict()), 200
+        
+    except Exception as e:
+        return jsonify({"msg": "Internal server error"}), 500
+
+@auth_bp.route("/boards", methods=["POST"])
+@jwt_required()
+def create_board():
+    try:
+        user_id = int(get_jwt_identity())
+        data = request.get_json()
+        
+        name = data.get("name", "Nuevo Tablero")
+        columns = data.get("columns", [])
+        
+        new_board = Board(
+            user_id=user_id,
+            name=name,
+            columns_data=json.dumps(columns)
+        )
+        
+        db.session.add(new_board)
+        db.session.commit()
+        
+        return jsonify(new_board.to_dict()), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": "Internal server error"}), 500
+
+@auth_bp.route("/boards/<int:board_id>", methods=["PUT"])
+@jwt_required()
+def update_board(board_id):
+    try:
+        user_id = int(get_jwt_identity())
+        data = request.get_json()
+        
+        board = Board.query.filter_by(id=board_id, user_id=user_id).first()
+        
+        if not board:
+            return jsonify({"msg": "Board not found"}), 404
+        
+        if "name" in data:
+            board.name = data["name"]
+        
+        if "columns" in data:
+            board.set_columns(data["columns"])
+        
+        board.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify(board.to_dict()), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": "Internal server error"}), 500
+
+@auth_bp.route("/boards/<int:board_id>", methods=["DELETE"])
+@jwt_required()
+def delete_board():
+    try:
+        user_id = int(get_jwt_identity())
+        board = Board.query.filter_by(id=board_id, user_id=user_id).first()
+        
+        if not board:
+            return jsonify({"msg": "Board not found"}), 404
+        
+        db.session.delete(board)
+        db.session.commit()
+        
+        return jsonify({"msg": "Board deleted successfully"}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": "Internal server error"}), 500
+
+# Ruta especial para actualizar solo las columnas (optimizada para el drag & drop)
+@auth_bp.route("/boards/<int:board_id>/columns", methods=["PUT"])
+@jwt_required()
+def update_board_columns(board_id):
+    try:
+        user_id = int(get_jwt_identity())
+        data = request.get_json()
+        
+        board = Board.query.filter_by(id=board_id, user_id=user_id).first()
+        
+        if not board:
+            return jsonify({"msg": "Board not found"}), 404
+        
+        if "columns" not in data:
+            return jsonify({"msg": "Columns data required"}), 400
+        
+        board.set_columns(data["columns"])
+        board.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({"msg": "Columns updated successfully"}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": "Internal server error"}), 500
+
+# Mantener las rutas existentes de autenticación
 @auth_bp.route("/debug-token", methods=["GET"])
 @jwt_required()
 def debug_token():
