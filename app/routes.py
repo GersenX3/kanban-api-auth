@@ -39,11 +39,11 @@ def register():
         default_columns = [
             {
                 "id": "col-1",
-                "title": "Pendiente",
-                "tasks": [{"id": "t-1", "text": "Primera tarea"}]
+                "title": "To do",
+                "tasks": [{"id": "t-1", "text": "First Task"}]
             },
-            {"id": "col-2", "title": "En progreso", "tasks": []},
-            {"id": "col-3", "title": "Hecho", "tasks": []}
+            {"id": "col-2", "title": "Progress", "tasks": []},
+            {"id": "col-3", "title": "Done", "tasks": []}
         ]
         
         default_board = Board(
