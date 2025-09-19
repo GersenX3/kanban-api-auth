@@ -12,6 +12,8 @@ done
 
 echo "PostgreSQL está listo. Aplicando migraciones..."
 
+flask --app app:create_app db init
+
 flask --app app:create_app db migrate -m "create users table"
 
 flask --app app:create_app db upgrade
