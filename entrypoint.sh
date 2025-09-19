@@ -1,9 +1,6 @@
 #!/bin/sh
 set -e
 
-# Esperar a que el servicio de PostgreSQL esté completamente listo para aceptar conexiones
-# Usamos un bucle con un retardo para evitar fallos por conexiones prematuras.
-# El flag -d "authdb" es crucial para verificar que la base de datos existe.
 echo "Esperando a la base de datos de PostgreSQL..."
 until PGPASSWORD=supersecretpassword pg_isready -h postgres-auth -p 5432 -U authuser -d authdb; do
   >&2 echo "PostgreSQL no está disponible - esperando..."
@@ -12,14 +9,18 @@ done
 
 echo "PostgreSQL está listo. Aplicando migraciones..."
 
-flask --app app:create_app db init
+# Verificar si el directorio migrations existe y tiene archivos
+if [ ! -d "migrations" ] || [ ! "$(ls -A migrations/versions 2>/dev/null)" ]; then
+    echo "Inicializando migrations..."
+    flask --app app:create_app db init
+fi
 
-flask --app app:create_app db migrate -m "create users table"
+# Verificar si necesitamos crear una nueva migración
+echo "Creando migración..."
+flask --app app:create_app db migrate -m "create users table" || echo "No hay cambios para migrar"
 
+echo "Aplicando migraciones..."
 flask --app app:create_app db upgrade
 
 echo "Iniciando el servidor Flask..."
-
-# Iniciar el servidor Flask. El comando 'exec' reemplaza el proceso de shell
-# por el proceso del servidor Flask, lo que permite a Docker manejar las señales de forma correcta.
 exec flask --app app:create_app run --host=0.0.0.0 --port=5000
